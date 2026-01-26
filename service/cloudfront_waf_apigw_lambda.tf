@@ -488,7 +488,9 @@ resource "aws_cloudfront_distribution" "mock" {
 
   depends_on = [
     aws_s3_bucket.cloudfront_logs,
-    aws_s3_bucket_public_access_block.cloudfront_logs
+    aws_s3_bucket_public_access_block.cloudfront_logs,
+    aws_s3_bucket_ownership_controls.cloudfront_logs,
+    aws_s3_bucket_acl.cloudfront_logs
   ]
 
   tags = {
@@ -540,6 +542,27 @@ resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# S3バケットの所有権制御（ACLを有効にするため）
+# CloudFrontがログを書き込むにはACLが必要
+resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+# S3バケットのACL設定（CloudFrontサービスに書き込み権限を付与）
+resource "aws_s3_bucket_acl" "cloudfront_logs" {
+  depends_on = [
+    aws_s3_bucket_ownership_controls.cloudfront_logs,
+    aws_s3_bucket_public_access_block.cloudfront_logs
+  ]
+
+  bucket = aws_s3_bucket.cloudfront_logs.id
+  acl    = "private"
 }
 
 # CloudFrontサービスがS3バケットにログを書き込むためのバケットポリシー
