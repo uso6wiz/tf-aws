@@ -1,16 +1,15 @@
 # -----------------------------------------------------------------------------
 # CloudFront -> WAF -> API Gateway -> Lambda のモックテスト環境
 # -----------------------------------------------------------------------------
-
-data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}
+# 注意: data "aws_region" "current" は ecs.tf で定義済み
+# 注意: data "aws_caller_identity" "me" は main.tf で定義済み
 
 locals {
   api_name            = "wiz-dev-mock-api"
   lambda_name         = "wiz-dev-mock-lambda"
   waf_name            = "wiz-dev-mock-waf"
   cloudfront_name     = "wiz-dev-mock-cf"
-  waf_log_bucket_name = "wiz-dev-waf-logs-${data.aws_caller_identity.current.account_id}"
+  waf_log_bucket_name = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
 }
 
 # -----------------------------------------------------------------------------
@@ -310,7 +309,7 @@ resource "aws_s3_bucket_policy" "waf_logs" {
           Service = "delivery.logs.amazonaws.com"
         }
         Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.waf_logs.arn}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
+        Resource = "${aws_s3_bucket.waf_logs.arn}/AWSLogs/${data.aws_caller_identity.me.account_id}/*"
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
