@@ -5,11 +5,11 @@
 # 注意: data "aws_caller_identity" "me" は main.tf で定義済み
 
 locals {
-  api_name                 = "wiz-dev-mock-api"
-  lambda_name              = "wiz-dev-mock-lambda"
-  waf_name                 = "wiz-dev-mock-waf"
-  cloudfront_name          = "wiz-dev-mock-cf"
-  waf_log_bucket_name      = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
+  api_name                   = "wiz-dev-mock-api"
+  lambda_name                = "wiz-dev-mock-lambda"
+  waf_name                   = "wiz-dev-mock-waf"
+  cloudfront_name            = "wiz-dev-mock-cf"
+  waf_log_bucket_name        = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
   cloudfront_log_bucket_name = "wiz-dev-cloudfront-logs-${data.aws_caller_identity.me.account_id}"
 }
 
@@ -104,10 +104,10 @@ resource "aws_api_gateway_rest_api" "mock" {
     Version = "2012-10-17"
     Statement = [
       {
-        Effect   = "Allow"
+        Effect    = "Allow"
         Principal = "*"
-        Action   = "execute-api:Invoke"
-        Resource = "*"
+        Action    = "execute-api:Invoke"
+        Resource  = "*"
       }
     ]
   })
