@@ -7,7 +7,8 @@ data "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
-  blog_oidc_sub = var.github_branch_blog == "*" ? "repo:${var.github_org_repo_blog}:*" : "repo:${var.github_org_repo_blog}:ref:refs/heads/${var.github_branch_blog}"
+  # repo:* で当該リポジトリの全 ref（main/master/PR 等）を許可。ブランチ違いで Assume 失敗するのを防ぐ
+  blog_oidc_sub = "repo:${var.github_org_repo_blog}:*"
 }
 
 resource "aws_iam_role" "github_actions_blog_deploy" {

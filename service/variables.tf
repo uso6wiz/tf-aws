@@ -36,11 +36,11 @@ variable "ecs_desired_count" {
 variable "github_org_repo_blog" {
   description = "uso8-blog の GitHub org/repo (e.g. myorg/uso8-blog-03)。デプロイ用 OIDC の trust に使用。"
   type        = string
-  default     = ""
+  default     = "uso6/uso8-blog-03"
 }
 
 variable "github_branch_blog" {
-  description = "uso8-blog でデプロイを許可するブランチ"
+  description = "uso8-blog でデプロイを許可するブランチ（現状 Trust は repo:* で全 ref 許可）"
   type        = string
   default     = "main"
 }
