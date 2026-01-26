@@ -163,6 +163,10 @@ resource "aws_apprunner_service" "blog" {
   service_name = local.apprunner_service_name
 
   source_configuration {
+    authentication_configuration {
+      access_role_arn = aws_iam_role.apprunner_access.arn
+    }
+
     image_repository {
       image_identifier      = "${aws_ecr_repository.app.repository_url}:latest"
       image_repository_type = "ECR"
@@ -176,7 +180,7 @@ resource "aws_apprunner_service" "blog" {
         }
       }
     }
-    access_role_arn          = aws_iam_role.apprunner_access.arn
+
     auto_deployments_enabled = false
   }
 
