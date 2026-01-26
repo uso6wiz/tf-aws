@@ -238,10 +238,17 @@ resource "aws_wafv2_web_acl" "apigw" {
 }
 
 # API Gateway Stage (WAF アタッチ用)
+# 注意: 既存のステージが存在する場合は、terraform import でインポートするか、
+# または既存のステージを手動で削除してください
 resource "aws_api_gateway_stage" "mock" {
   deployment_id = aws_api_gateway_deployment.mock.id
   rest_api_id   = aws_api_gateway_rest_api.mock.id
   stage_name    = "test"
+
+  lifecycle {
+    # 既存のステージが存在する場合、deployment_id の変更を無視
+    ignore_changes = [deployment_id]
+  }
 }
 
 # WAF を API Gateway にアタッチ
@@ -333,8 +340,9 @@ resource "aws_s3_bucket_policy" "waf_logs" {
 
 # CloudWatch Logs Log Group for WAF Logs
 # 注意: REGIONALスコープのWAFはS3に直接書き込めないため、CloudWatch Logsを使用
+# 重要: WAFv2のロググループ名は "aws-waf-logs-" で始まる必要がある
 resource "aws_cloudwatch_log_group" "waf_logs" {
-  name              = "/aws/waf/${local.waf_name}"
+  name              = "aws-waf-logs-${local.waf_name}"
   retention_in_days = 7
 
   tags = {
@@ -373,9 +381,10 @@ resource "aws_cloudwatch_log_resource_policy" "waf_logs" {
 }
 
 # WAFログ設定（CloudWatch Logsを使用）
+# 注意: WAFv2のログ設定では、CloudWatch LogsのARNに :* サフィックスが必要
 resource "aws_wafv2_web_acl_logging_configuration" "apigw" {
   resource_arn            = aws_wafv2_web_acl.apigw.arn
-  log_destination_configs = [aws_cloudwatch_log_group.waf_logs.arn]
+  log_destination_configs = ["${aws_cloudwatch_log_group.waf_logs.arn}:*"]
 
   # ログに含めるフィールドを指定（オプション）
   redacted_fields {
