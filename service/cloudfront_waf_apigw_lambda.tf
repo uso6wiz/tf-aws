@@ -433,14 +433,10 @@ resource "aws_cloudfront_distribution" "mock" {
     }
 
     # API Gatewayが正しくリクエストを処理できるようにヘッダーを設定
+    # 注意: HostヘッダーはCloudFrontが自動的にオリジンのdomain_nameに設定するため、カスタムヘッダーでは設定できない
     custom_header {
       name  = "X-Forwarded-Proto"
       value = "https"
-    }
-    # HostヘッダーをAPI Gatewayのドメイン名に設定
-    custom_header {
-      name  = "Host"
-      value = "${aws_api_gateway_rest_api.mock.id}.execute-api.${data.aws_region.current.name}.amazonaws.com"
     }
   }
 
