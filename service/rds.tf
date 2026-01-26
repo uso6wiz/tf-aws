@@ -62,11 +62,11 @@ resource "aws_db_instance" "blog" {
   multi_az               = false
   publicly_accessible    = false
 
-  skip_final_snapshot       = true
-  deletion_protection       = false
-  backup_retention_period   = 7
-  backup_window             = "03:00-04:00"
-  maintenance_window        = "sun:04:00-sun:05:00"
+  skip_final_snapshot     = true
+  deletion_protection     = false
+  backup_retention_period = 7
+  backup_window           = "03:00-04:00"
+  maintenance_window      = "sun:04:00-sun:05:00"
 
   tags = {
     Name    = "wiz-dev-blog-db"
