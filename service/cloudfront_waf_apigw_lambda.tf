@@ -193,63 +193,8 @@ resource "aws_wafv2_web_acl" "apigw" {
     allow {}
   }
 
-  # CloudFrontからのリクエストを許可するルール（最優先）
-  # CloudFrontからのリクエストは特定のヘッダー（CloudFront-Forwarded-Proto）を持っているため、それで識別
-  # テスト環境のため、このルールでCloudFrontからのリクエストを許可
-  rule {
-    name     = "AllowCloudFrontRequests"
-    priority = 0
-
-    action {
-      allow {}
-    }
-
-    statement {
-      # CloudFront-Forwarded-Protoヘッダーが存在する場合（CloudFrontからのリクエスト）
-      # または、X-Forwarded-Protoヘッダーが存在する場合（プロキシ経由のリクエスト）
-      or_statement {
-        statement {
-          byte_match_statement {
-            positional_constraint = "CONTAINS"
-            search_string         = "https"
-            field_to_match {
-              single_header {
-                name = "cloudfront-forwarded-proto"
-              }
-            }
-            text_transformation {
-              priority = 0
-              type     = "LOWERCASE"
-            }
-          }
-        }
-        statement {
-          # X-Forwarded-Protoヘッダーが存在する場合も許可（CloudFrontが設定する可能性がある）
-          byte_match_statement {
-            positional_constraint = "CONTAINS"
-            search_string         = "https"
-            field_to_match {
-              single_header {
-                name = "x-forwarded-proto"
-              }
-            }
-            text_transformation {
-              priority = 0
-              type     = "LOWERCASE"
-            }
-          }
-        }
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "AllowCloudFrontRequests"
-      sampled_requests_enabled   = true
-    }
-  }
-
   # 基本的なルール: Rate Limiting
+  # 注意: CloudFrontからのリクエストは除外（CloudFront-Forwarded-Protoヘッダーが存在する場合）
   rule {
     name     = "RateLimitRule"
     priority = 1
@@ -259,9 +204,33 @@ resource "aws_wafv2_web_acl" "apigw" {
     }
 
     statement {
-      rate_based_statement {
-        limit              = 2000
-        aggregate_key_type = "IP"
+      and_statement {
+        statement {
+          # CloudFrontからのリクエストでない場合のみ適用
+          not_statement {
+            statement {
+              byte_match_statement {
+                positional_constraint = "CONTAINS"
+                search_string         = "https"
+                field_to_match {
+                  single_header {
+                    name = "cloudfront-forwarded-proto"
+                  }
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "LOWERCASE"
+                }
+              }
+            }
+          }
+        }
+        statement {
+          rate_based_statement {
+            limit              = 2000
+            aggregate_key_type = "IP"
+          }
+        }
       }
     }
 
@@ -273,6 +242,7 @@ resource "aws_wafv2_web_acl" "apigw" {
   }
 
   # AWS Managed Rule: Common Rule Set
+  # 注意: CloudFrontからのリクエストは除外（CloudFront-Forwarded-Protoヘッダーが存在する場合）
   rule {
     name     = "AWSManagedRulesCommonRuleSet"
     priority = 2
@@ -282,9 +252,33 @@ resource "aws_wafv2_web_acl" "apigw" {
     }
 
     statement {
-      managed_rule_group_statement {
-        name        = "AWSManagedRulesCommonRuleSet"
-        vendor_name = "AWS"
+      and_statement {
+        statement {
+          # CloudFrontからのリクエストでない場合のみ適用
+          not_statement {
+            statement {
+              byte_match_statement {
+                positional_constraint = "CONTAINS"
+                search_string         = "https"
+                field_to_match {
+                  single_header {
+                    name = "cloudfront-forwarded-proto"
+                  }
+                }
+                text_transformation {
+                  priority = 0
+                  type     = "LOWERCASE"
+                }
+              }
+            }
+          }
+        }
+        statement {
+          managed_rule_group_statement {
+            name        = "AWSManagedRulesCommonRuleSet"
+            vendor_name = "AWS"
+          }
+        }
       }
     }
 
