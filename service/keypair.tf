@@ -1,6 +1,6 @@
 resource "aws_key_pair" "default" {
   key_name   = "wiz-dev-keypair"
-  public_key = file("~/.ssh/wiz-dev.pub")
+  public_key = file("${path.module}/keys/wiz-dev.pub")
 
   tags = {
     Name    = "wiz-dev-keypair"
