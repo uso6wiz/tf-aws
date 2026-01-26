@@ -6,10 +6,10 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 locals {
-  api_name = "wiz-dev-mock-api"
-  lambda_name = "wiz-dev-mock-lambda"
-  waf_name = "wiz-dev-mock-waf"
-  cloudfront_name = "wiz-dev-mock-cf"
+  api_name            = "wiz-dev-mock-api"
+  lambda_name         = "wiz-dev-mock-lambda"
+  waf_name            = "wiz-dev-mock-waf"
+  cloudfront_name     = "wiz-dev-mock-cf"
   waf_log_bucket_name = "wiz-dev-waf-logs-${data.aws_caller_identity.current.account_id}"
 }
 
@@ -47,7 +47,7 @@ data "archive_file" "lambda_zip" {
   type        = "zip"
   output_path = "${path.module}/lambda_function.zip"
   source {
-    content = <<EOF
+    content  = <<EOF
 exports.handler = async (event) => {
     console.log('Event:', JSON.stringify(event, null, 2));
     
@@ -75,9 +75,9 @@ EOF
 resource "aws_lambda_function" "mock" {
   filename         = data.archive_file.lambda_zip.output_path
   function_name    = local.lambda_name
-  role            = aws_iam_role.lambda.arn
-  handler         = "index.handler"
-  runtime         = "nodejs20.x"
+  role             = aws_iam_role.lambda.arn
+  handler          = "index.handler"
+  runtime          = "nodejs20.x"
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
   tags = {
@@ -198,8 +198,8 @@ resource "aws_wafv2_web_acl" "apigw" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                 = "RateLimitRule"
-      sampled_requests_enabled    = true
+      metric_name                = "RateLimitRule"
+      sampled_requests_enabled   = true
     }
   }
 
@@ -221,8 +221,8 @@ resource "aws_wafv2_web_acl" "apigw" {
 
     visibility_config {
       cloudwatch_metrics_enabled = true
-      metric_name                 = "CommonRuleSetMetric"
-      sampled_requests_enabled    = true
+      metric_name                = "CommonRuleSetMetric"
+      sampled_requests_enabled   = true
     }
   }
 
