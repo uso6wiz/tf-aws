@@ -15,7 +15,7 @@ locals {
 # -----------------------------------------------------------------------------
 resource "aws_ecs_cluster" "main" {
   name = local.ecs_name
-  settings {
+  setting {
     name  = "containerInsights"
     value = "disabled"
   }
