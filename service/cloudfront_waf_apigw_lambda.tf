@@ -479,11 +479,17 @@ resource "aws_cloudfront_distribution" "mock" {
   }
 
   # CloudFrontアクセスログ設定
+  # 注意: CloudFrontはS3バケットのドメイン名（regional domain name）を必要とする
   logging_config {
-    bucket          = aws_s3_bucket.cloudfront_logs.id
+    bucket          = aws_s3_bucket.cloudfront_logs.bucket_regional_domain_name
     include_cookies = false
     prefix          = "cloudfront-logs"
   }
+
+  depends_on = [
+    aws_s3_bucket.cloudfront_logs,
+    aws_s3_bucket_public_access_block.cloudfront_logs
+  ]
 
   tags = {
     Name    = local.cloudfront_name
@@ -537,6 +543,7 @@ resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
 }
 
 # CloudFrontサービスがS3バケットにログを書き込むためのバケットポリシー
+# 注意: CloudFront DistributionのARNを参照するため、Distribution作成後に適用される
 resource "aws_s3_bucket_policy" "cloudfront_logs" {
   bucket = aws_s3_bucket.cloudfront_logs.id
 
@@ -573,6 +580,8 @@ resource "aws_s3_bucket_policy" "cloudfront_logs" {
       }
     ]
   })
+
+  depends_on = [aws_cloudfront_distribution.mock]
 }
 
 # -----------------------------------------------------------------------------
