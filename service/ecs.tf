@@ -12,12 +12,26 @@ locals {
 
 # -----------------------------------------------------------------------------
 # ECS Service Role（ENI 管理用）
-# 既に存在する場合は terraform import でインポート可能:
-# terraform import aws_iam_service_linked_role.ecs arn:aws:iam::ACCOUNT:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+# AWSServiceRoleForECS が既存でも Assume できない場合用。カスタムロールを明示指定する。
 # -----------------------------------------------------------------------------
-resource "aws_iam_service_linked_role" "ecs" {
-  aws_service_name = "ecs.amazonaws.com"
-  description      = "Service-linked role for ECS to manage ENIs"
+resource "aws_iam_role" "ecs_service" {
+  name        = "wiz-dev-ecs-service"
+  description = "ECS service role for ENI management (use instead of AWSServiceRoleForECS)"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "ecs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = { Name = "wiz-dev-ecs-service", Project = "tf-aws", Env = "dev" }
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_service" {
+  role       = aws_iam_role.ecs_service.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceRole"
 }
 
 # -----------------------------------------------------------------------------
@@ -183,6 +197,7 @@ resource "aws_ecs_service" "app" {
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.ecs_desired_count
   launch_type     = "FARGATE"
+  iam_role        = aws_iam_role.ecs_service.arn
 
   network_configuration {
     subnets          = module.vpc.private_subnets
