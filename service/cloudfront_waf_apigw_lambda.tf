@@ -7,9 +7,7 @@
 locals {
   api_name                   = "wiz-dev-mock-api"
   lambda_name                = "wiz-dev-mock-lambda"
-  waf_name                   = "wiz-dev-mock-waf"
   cloudfront_name            = "wiz-dev-mock-cf"
-  waf_log_bucket_name        = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
   cloudfront_log_bucket_name = "wiz-dev-cloudfront-logs-${data.aws_caller_identity.me.account_id}"
 }
 
@@ -181,130 +179,7 @@ resource "aws_lambda_permission" "apigw" {
   source_arn    = "${aws_api_gateway_rest_api.mock.execution_arn}/*/*"
 }
 
-# -----------------------------------------------------------------------------
-# WAF Web ACL (API Gateway用)
-# -----------------------------------------------------------------------------
-resource "aws_wafv2_web_acl" "apigw" {
-  name        = local.waf_name
-  description = "WAF for API Gateway mock test"
-  scope       = "REGIONAL"
-
-  default_action {
-    allow {}
-  }
-
-  # 基本的なルール: Rate Limiting
-  # 注意: CloudFrontからのリクエストは除外（CloudFront-Forwarded-Protoヘッダーが存在する場合）
-  rule {
-    name     = "RateLimitRule"
-    priority = 1
-
-    action {
-      block {}
-    }
-
-    statement {
-      and_statement {
-        statement {
-          # CloudFrontからのリクエストでない場合のみ適用
-          not_statement {
-            statement {
-              byte_match_statement {
-                positional_constraint = "CONTAINS"
-                search_string         = "https"
-                field_to_match {
-                  single_header {
-                    name = "cloudfront-forwarded-proto"
-                  }
-                }
-                text_transformation {
-                  priority = 0
-                  type     = "LOWERCASE"
-                }
-              }
-            }
-          }
-        }
-        statement {
-          rate_based_statement {
-            limit              = 2000
-            aggregate_key_type = "IP"
-          }
-        }
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "RateLimitRule"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  # AWS Managed Rule: Common Rule Set
-  # 注意: CloudFrontからのリクエストは除外（CloudFront-Forwarded-Protoヘッダーが存在する場合）
-  rule {
-    name     = "AWSManagedRulesCommonRuleSet"
-    priority = 2
-
-    override_action {
-      none {}
-    }
-
-    statement {
-      and_statement {
-        statement {
-          # CloudFrontからのリクエストでない場合のみ適用
-          not_statement {
-            statement {
-              byte_match_statement {
-                positional_constraint = "CONTAINS"
-                search_string         = "https"
-                field_to_match {
-                  single_header {
-                    name = "cloudfront-forwarded-proto"
-                  }
-                }
-                text_transformation {
-                  priority = 0
-                  type     = "LOWERCASE"
-                }
-              }
-            }
-          }
-        }
-        statement {
-          managed_rule_group_statement {
-            name        = "AWSManagedRulesCommonRuleSet"
-            vendor_name = "AWS"
-          }
-        }
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "CommonRuleSetMetric"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  visibility_config {
-    cloudwatch_metrics_enabled = true
-    metric_name                = local.waf_name
-    sampled_requests_enabled   = true
-  }
-
-  tags = {
-    Name    = local.waf_name
-    Project = "tf-aws"
-    Env     = "dev"
-  }
-}
-
-# API Gateway Stage (WAF アタッチ用)
-# 注意: 既存のステージが存在する場合は、terraform import でインポートするか、
-# または既存のステージを手動で削除してください
+# API Gateway Stage
 resource "aws_api_gateway_stage" "mock" {
   deployment_id = aws_api_gateway_deployment.mock.id
   rest_api_id   = aws_api_gateway_rest_api.mock.id
@@ -316,158 +191,13 @@ resource "aws_api_gateway_stage" "mock" {
   }
 }
 
-# WAF を API Gateway にアタッチ
-resource "aws_wafv2_web_acl_association" "apigw" {
-  resource_arn = aws_api_gateway_stage.mock.arn
-  web_acl_arn  = aws_wafv2_web_acl.apigw.arn
-}
-
-# -----------------------------------------------------------------------------
-# S3 Bucket for WAF Logs (オプション)
-# 注意: REGIONALスコープのWAFはS3に直接書き込めません。
-# CloudWatch LogsからKinesis Data Firehose経由でS3に送る場合は使用可能です。
-# 現在はCloudWatch Logsを使用しているため、このバケットは将来の拡張用です。
-# -----------------------------------------------------------------------------
-resource "aws_s3_bucket" "waf_logs" {
-  bucket        = local.waf_log_bucket_name
-  force_destroy = true # テスト環境のため、削除時に中身も削除
-
-  tags = {
-    Name    = local.waf_log_bucket_name
-    Project = "tf-aws"
-    Env     = "dev"
-  }
-}
-
-# S3バケットのバージョニング
-resource "aws_s3_bucket_versioning" "waf_logs" {
-  bucket = aws_s3_bucket.waf_logs.id
-
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-# S3バケットの暗号化
-resource "aws_s3_bucket_server_side_encryption_configuration" "waf_logs" {
-  bucket = aws_s3_bucket.waf_logs.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-# S3バケットのパブリックアクセスブロック
-resource "aws_s3_bucket_public_access_block" "waf_logs" {
-  bucket = aws_s3_bucket.waf_logs.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-# WAFサービスがS3バケットにログを書き込むためのバケットポリシー
-resource "aws_s3_bucket_policy" "waf_logs" {
-  bucket = aws_s3_bucket.waf_logs.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "AWSLogDeliveryWrite"
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:PutObject"
-        Resource = "${aws_s3_bucket.waf_logs.arn}/AWSLogs/${data.aws_caller_identity.me.account_id}/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
-          }
-        }
-      },
-      {
-        Sid    = "AWSLogDeliveryAclCheck"
-        Effect = "Allow"
-        Principal = {
-          Service = "delivery.logs.amazonaws.com"
-        }
-        Action   = "s3:GetBucketAcl"
-        Resource = aws_s3_bucket.waf_logs.arn
-      }
-    ]
-  })
-}
-
-# CloudWatch Logs Log Group for WAF Logs
-# 注意: REGIONALスコープのWAFはS3に直接書き込めないため、CloudWatch Logsを使用
-# 重要: WAFv2のロググループ名は "aws-waf-logs-" で始まる必要がある
-resource "aws_cloudwatch_log_group" "waf_logs" {
-  name              = "aws-waf-logs-${local.waf_name}"
-  retention_in_days = 7
-
-  tags = {
-    Name    = "${local.waf_name}-logs"
-    Project = "tf-aws"
-    Env     = "dev"
-  }
-}
-
-# WAFサービスがCloudWatch Logsに書き込むためのリソースポリシー
-resource "aws_cloudwatch_log_resource_policy" "waf_logs" {
-  policy_name = "${local.waf_name}-logs-policy"
-
-  policy_document = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Principal = {
-          Service = "wafv2.amazonaws.com"
-        }
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Resource = "${aws_cloudwatch_log_group.waf_logs.arn}:*"
-        Condition = {
-          ArnEquals = {
-            "aws:SourceArn" = aws_wafv2_web_acl.apigw.arn
-          }
-        }
-      }
-    ]
-  })
-}
-
-# WAFログ設定（CloudWatch Logsを使用）
-# 注意: WAFv2のログ設定では、CloudWatch LogsのARNに :* サフィックスが必要
-resource "aws_wafv2_web_acl_logging_configuration" "apigw" {
-  resource_arn            = aws_wafv2_web_acl.apigw.arn
-  log_destination_configs = ["${aws_cloudwatch_log_group.waf_logs.arn}:*"]
-
-  # ログに含めるフィールドを指定（オプション）
-  redacted_fields {
-    single_header {
-      name = "authorization"
-    }
-  }
-
-  depends_on = [aws_cloudwatch_log_resource_policy.waf_logs]
-}
-
 # -----------------------------------------------------------------------------
 # CloudFront Distribution
 # -----------------------------------------------------------------------------
 resource "aws_cloudfront_distribution" "mock" {
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "CloudFront for WAF -> API Gateway -> Lambda test"
+  comment             = "CloudFront for API Gateway -> Lambda test"
   default_root_object = ""
 
   origin {
@@ -509,10 +239,6 @@ resource "aws_cloudfront_distribution" "mock" {
     max_ttl                = 0
     compress               = true
   }
-
-  # WAF Web ACL を CloudFront にアタッチ（CloudFront スコープが必要）
-  # 注意: API Gateway に既に WAF をアタッチしているため、CloudFront レベルではオプション
-  # CloudFront 用の WAF を作成する場合は scope = "CLOUDFRONT" が必要
 
   restrictions {
     geo_restriction {
@@ -676,16 +402,6 @@ output "api_gateway_url" {
   description = "API Gateway endpoint URL"
 }
 
-output "waf_web_acl_id" {
-  value       = aws_wafv2_web_acl.apigw.id
-  description = "WAF Web ACL ID"
-}
-
-output "waf_web_acl_arn" {
-  value       = aws_wafv2_web_acl.apigw.arn
-  description = "WAF Web ACL ARN"
-}
-
 output "cloudfront_distribution_id" {
   value       = aws_cloudfront_distribution.mock.id
   description = "CloudFront distribution ID"
@@ -699,26 +415,6 @@ output "cloudfront_domain_name" {
 output "cloudfront_url" {
   value       = "https://${aws_cloudfront_distribution.mock.domain_name}"
   description = "CloudFront distribution URL (use this to test)"
-}
-
-output "waf_log_bucket_name" {
-  value       = aws_s3_bucket.waf_logs.id
-  description = "S3 bucket name for WAF logs (optional, for future use)"
-}
-
-output "waf_log_bucket_arn" {
-  value       = aws_s3_bucket.waf_logs.arn
-  description = "S3 bucket ARN for WAF logs (optional, for future use)"
-}
-
-output "waf_cloudwatch_log_group_name" {
-  value       = aws_cloudwatch_log_group.waf_logs.name
-  description = "CloudWatch Logs group name for WAF logs"
-}
-
-output "waf_cloudwatch_log_group_arn" {
-  value       = aws_cloudwatch_log_group.waf_logs.arn
-  description = "CloudWatch Logs group ARN for WAF logs"
 }
 
 output "cloudfront_log_bucket_name" {
