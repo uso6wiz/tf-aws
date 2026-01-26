@@ -11,6 +11,16 @@ locals {
 }
 
 # -----------------------------------------------------------------------------
+# ECS Service Role（ENI 管理用）
+# 既に存在する場合は terraform import でインポート可能:
+# terraform import aws_iam_service_linked_role.ecs arn:aws:iam::ACCOUNT:role/aws-service-role/ecs.amazonaws.com/AWSServiceRoleForECS
+# -----------------------------------------------------------------------------
+resource "aws_iam_service_linked_role" "ecs" {
+  aws_service_name = "ecs.amazonaws.com"
+  description      = "Service-linked role for ECS to manage ENIs"
+}
+
+# -----------------------------------------------------------------------------
 # ECS Cluster
 # -----------------------------------------------------------------------------
 resource "aws_ecs_cluster" "main" {
