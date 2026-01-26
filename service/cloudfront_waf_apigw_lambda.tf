@@ -151,7 +151,6 @@ resource "aws_api_gateway_deployment" "mock" {
   ]
 
   rest_api_id = aws_api_gateway_rest_api.mock.id
-  stage_name  = "test"
 
   lifecycle {
     create_before_destroy = true
@@ -252,7 +251,10 @@ resource "aws_wafv2_web_acl_association" "apigw" {
 }
 
 # -----------------------------------------------------------------------------
-# S3 Bucket for WAF Logs
+# S3 Bucket for WAF Logs (オプション)
+# 注意: REGIONALスコープのWAFはS3に直接書き込めません。
+# CloudWatch LogsからKinesis Data Firehose経由でS3に送る場合は使用可能です。
+# 現在はCloudWatch Logsを使用しているため、このバケットは将来の拡張用です。
 # -----------------------------------------------------------------------------
 resource "aws_s3_bucket" "waf_logs" {
   bucket        = local.waf_log_bucket_name
@@ -329,10 +331,51 @@ resource "aws_s3_bucket_policy" "waf_logs" {
   })
 }
 
-# WAFログ設定
+# CloudWatch Logs Log Group for WAF Logs
+# 注意: REGIONALスコープのWAFはS3に直接書き込めないため、CloudWatch Logsを使用
+resource "aws_cloudwatch_log_group" "waf_logs" {
+  name              = "/aws/waf/${local.waf_name}"
+  retention_in_days = 7
+
+  tags = {
+    Name    = "${local.waf_name}-logs"
+    Project = "tf-aws"
+    Env     = "dev"
+  }
+}
+
+# WAFサービスがCloudWatch Logsに書き込むためのリソースポリシー
+resource "aws_cloudwatch_log_resource_policy" "waf_logs" {
+  policy_name = "${local.waf_name}-logs-policy"
+
+  policy_document = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "wafv2.amazonaws.com"
+        }
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "${aws_cloudwatch_log_group.waf_logs.arn}:*"
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = aws_wafv2_web_acl.apigw.arn
+          }
+        }
+      }
+    ]
+  })
+}
+
+# WAFログ設定（CloudWatch Logsを使用）
 resource "aws_wafv2_web_acl_logging_configuration" "apigw" {
   resource_arn            = aws_wafv2_web_acl.apigw.arn
-  log_destination_configs = [aws_s3_bucket.waf_logs.arn]
+  log_destination_configs = [aws_cloudwatch_log_group.waf_logs.arn]
 
   # ログに含めるフィールドを指定（オプション）
   redacted_fields {
@@ -340,6 +383,8 @@ resource "aws_wafv2_web_acl_logging_configuration" "apigw" {
       name = "authorization"
     }
   }
+
+  depends_on = [aws_cloudwatch_log_resource_policy.waf_logs]
 }
 
 # -----------------------------------------------------------------------------
@@ -460,10 +505,20 @@ output "cloudfront_url" {
 
 output "waf_log_bucket_name" {
   value       = aws_s3_bucket.waf_logs.id
-  description = "S3 bucket name for WAF logs"
+  description = "S3 bucket name for WAF logs (optional, for future use)"
 }
 
 output "waf_log_bucket_arn" {
   value       = aws_s3_bucket.waf_logs.arn
-  description = "S3 bucket ARN for WAF logs"
+  description = "S3 bucket ARN for WAF logs (optional, for future use)"
+}
+
+output "waf_cloudwatch_log_group_name" {
+  value       = aws_cloudwatch_log_group.waf_logs.name
+  description = "CloudWatch Logs group name for WAF logs"
+}
+
+output "waf_cloudwatch_log_group_arn" {
+  value       = aws_cloudwatch_log_group.waf_logs.arn
+  description = "CloudWatch Logs group ARN for WAF logs"
 }
