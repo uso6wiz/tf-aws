@@ -5,11 +5,12 @@
 # 注意: data "aws_caller_identity" "me" は main.tf で定義済み
 
 locals {
-  api_name            = "wiz-dev-mock-api"
-  lambda_name         = "wiz-dev-mock-lambda"
-  waf_name            = "wiz-dev-mock-waf"
-  cloudfront_name     = "wiz-dev-mock-cf"
-  waf_log_bucket_name = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
+  api_name                 = "wiz-dev-mock-api"
+  lambda_name              = "wiz-dev-mock-lambda"
+  waf_name                 = "wiz-dev-mock-waf"
+  cloudfront_name          = "wiz-dev-mock-cf"
+  waf_log_bucket_name      = "wiz-dev-waf-logs-${data.aws_caller_identity.me.account_id}"
+  cloudfront_log_bucket_name = "wiz-dev-cloudfront-logs-${data.aws_caller_identity.me.account_id}"
 }
 
 # -----------------------------------------------------------------------------
@@ -96,6 +97,20 @@ resource "aws_api_gateway_rest_api" "mock" {
   endpoint_configuration {
     types = ["REGIONAL"]
   }
+
+  # CloudFrontからのアクセスを許可するリソースポリシー
+  # テスト環境のため、すべてのアクセスを許可
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Principal = "*"
+        Action   = "execute-api:Invoke"
+        Resource = "*"
+      }
+    ]
+  })
 
   tags = {
     Name    = local.api_name
@@ -417,9 +432,15 @@ resource "aws_cloudfront_distribution" "mock" {
       origin_ssl_protocols   = ["TLSv1.2"]
     }
 
+    # API Gatewayが正しくリクエストを処理できるようにヘッダーを設定
     custom_header {
       name  = "X-Forwarded-Proto"
       value = "https"
+    }
+    # HostヘッダーをAPI Gatewayのドメイン名に設定
+    custom_header {
+      name  = "Host"
+      value = "${aws_api_gateway_rest_api.mock.id}.execute-api.${data.aws_region.current.name}.amazonaws.com"
     }
   }
 
@@ -457,11 +478,101 @@ resource "aws_cloudfront_distribution" "mock" {
     cloudfront_default_certificate = true
   }
 
+  # CloudFrontアクセスログ設定
+  logging_config {
+    bucket          = aws_s3_bucket.cloudfront_logs.id
+    include_cookies = false
+    prefix          = "cloudfront-logs"
+  }
+
   tags = {
     Name    = local.cloudfront_name
     Project = "tf-aws"
     Env     = "dev"
   }
+}
+
+# -----------------------------------------------------------------------------
+# S3 Bucket for CloudFront Access Logs
+# -----------------------------------------------------------------------------
+resource "aws_s3_bucket" "cloudfront_logs" {
+  bucket        = local.cloudfront_log_bucket_name
+  force_destroy = true # テスト環境のため、削除時に中身も削除
+
+  tags = {
+    Name    = local.cloudfront_log_bucket_name
+    Project = "tf-aws"
+    Env     = "dev"
+  }
+}
+
+# S3バケットのバージョニング
+resource "aws_s3_bucket_versioning" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# S3バケットの暗号化
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# S3バケットのパブリックアクセスブロック
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudFrontサービスがS3バケットにログを書き込むためのバケットポリシー
+resource "aws_s3_bucket_policy" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontServicePrincipal"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.cloudfront_logs.arn}/cloudfront-logs/*"
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.me.account_id}:distribution/${aws_cloudfront_distribution.mock.id}"
+          }
+        }
+      },
+      {
+        Sid    = "AllowCloudFrontServicePrincipalGetBucketAcl"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.cloudfront_logs.arn
+        Condition = {
+          StringEquals = {
+            "AWS:SourceArn" = "arn:aws:cloudfront::${data.aws_caller_identity.me.account_id}:distribution/${aws_cloudfront_distribution.mock.id}"
+          }
+        }
+      }
+    ]
+  })
 }
 
 # -----------------------------------------------------------------------------
@@ -530,4 +641,14 @@ output "waf_cloudwatch_log_group_name" {
 output "waf_cloudwatch_log_group_arn" {
   value       = aws_cloudwatch_log_group.waf_logs.arn
   description = "CloudWatch Logs group ARN for WAF logs"
+}
+
+output "cloudfront_log_bucket_name" {
+  value       = aws_s3_bucket.cloudfront_logs.id
+  description = "S3 bucket name for CloudFront access logs"
+}
+
+output "cloudfront_log_bucket_arn" {
+  value       = aws_s3_bucket.cloudfront_logs.arn
+  description = "S3 bucket ARN for CloudFront access logs"
 }
