@@ -13,4 +13,3 @@ resource "aws_instance" "mongo" {
     Role    = "mongo"
   }
 }
-
