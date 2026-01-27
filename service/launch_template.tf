@@ -1,5 +1,5 @@
-resource "aws_launch_template" "mongo" {
-  name_prefix   = "wiz-dev-mongo-"
+resource "aws_launch_template" "old_ubuntu" {
+  name_prefix   = "wiz-dev-old-ubuntu-"
   image_id      = "ami-0950bf7d28f290092"
   instance_type = "t3.small"
   key_name      = aws_key_pair.default.key_name
@@ -27,10 +27,10 @@ resource "aws_launch_template" "mongo" {
   tag_specifications {
     resource_type = "instance"
     tags = {
-      Name    = "wiz-dev-mongo"
+      Name    = "wiz-dev-old-ubuntu"
       Project = "tf-aws"
       Env     = "dev"
-      Role    = "mongo"
+      Role    = "old_ubuntu"
     }
   }
 
@@ -39,7 +39,7 @@ resource "aws_launch_template" "mongo" {
     tags = {
       Project = "tf-aws"
       Env     = "dev"
-      Role    = "mongo"
+      Role    = "old_ubuntu"
     }
   }
 }
