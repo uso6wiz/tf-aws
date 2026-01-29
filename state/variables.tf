@@ -1,6 +1,7 @@
 variable "github_org_repo" {
-  description = "GitHub org/repo (e.g. myorg/tf-aws). Used for OIDC trust policy."
+  description = "GitHub org/repo (e.g. uso6wiz/tf-aws). Used for OIDC trust policy."
   type        = string
+  default     = "uso6wiz/tf-aws"
 }
 
 variable "github_branch" {
