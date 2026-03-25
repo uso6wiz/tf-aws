@@ -1,3 +1,48 @@
+# -----------------------------------------------------------------------------
+# EKS
+# -----------------------------------------------------------------------------
+variable "eks_cluster_name" {
+  description = "EKS クラスタ名（VPC サブネットの kubernetes.io/cluster/* タグにも使用）"
+  type        = string
+  default     = "wiz-dev-eks"
+}
+
+variable "eks_cluster_version" {
+  description = "EKS コントロールプレーンの Kubernetes バージョン"
+  type        = string
+  default     = "1.31"
+}
+
+variable "eks_node_desired_size" {
+  description = "マネージドノードグループの desired 台数（約2台想定）"
+  type        = number
+  default     = 2
+}
+
+variable "eks_node_min_size" {
+  description = "マネージドノードグループの最小台数"
+  type        = number
+  default     = 1
+}
+
+variable "eks_node_max_size" {
+  description = "マネージドノードグループの最大台数"
+  type        = number
+  default     = 4
+}
+
+variable "eks_node_instance_types" {
+  description = "ワーカーノードのインスタンスタイプ"
+  type        = list(string)
+  default     = ["t3.medium"]
+}
+
+variable "eks_kubectl_admin_principal_arns" {
+  description = "kubectl 用にクラスタ管理者を付与する IAM の ARN（Terraform と別プリンシパルのとき指定。例: arn:aws:iam::123456789012:user/alice）"
+  type        = list(string)
+  default     = []
+}
+
 variable "db_password" {
   description = "Master password for RDS PostgreSQL (uso8-blog). Override via TF_VAR_db_password or -var."
   type        = string

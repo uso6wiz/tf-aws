@@ -2,7 +2,7 @@ terraform {
   required_version = ">= 1.6.0"
 
   backend "s3" {
-    bucket         = "tfstate-127214177449-apse1" #Change Real Name
+    bucket         = "tfstate-975050084337-apse1" #Change Real Name
     key            = "service/dev/terraform.tfstate"
     region         = "ap-southeast-1"
     dynamodb_table = "terraform-lock"
@@ -12,7 +12,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 5.40"
     }
   }
 }
